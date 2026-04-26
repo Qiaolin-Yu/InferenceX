@@ -52,6 +52,14 @@ fi
 
 start_gpu_monitor --output "$PWD/gpu_metrics.csv"
 
+# 1k inputs need more SWA cache headroom on B300 than 8k inputs do; 0.5 was
+# tuned empirically for the 1k1k recipe, while 0.1 is the cookbook default.
+if [[ "$ISL" == "1024" ]]; then
+    SWA_FULL_TOKENS_RATIO=0.5
+else
+    SWA_FULL_TOKENS_RATIO=0.1
+fi
+
 # Pick the parallelism + MoE backend based on DP_ATTENTION (mirrors the vllm
 # script's pattern). DP-attention turns on EP-MoE (deepep) and the related
 # mega_moe optimizations; single-instance uses flashinfer_mxfp4.
@@ -97,7 +105,7 @@ PYTHONNOUSERSITE=1 sglang serve \
     --tp $TP \
     --max-running-requests "$((CONC * 3 / 2))" \
     --mem-fraction-static 0.90 \
-    --swa-full-tokens-ratio 0.1 \
+    --swa-full-tokens-ratio "$SWA_FULL_TOKENS_RATIO" \
     "${PARALLEL_ARGS[@]}" $EVAL_CONTEXT_ARGS >> $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
