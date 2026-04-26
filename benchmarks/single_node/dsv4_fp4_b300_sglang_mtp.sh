@@ -3,21 +3,21 @@
 source "$(dirname "$0")/../benchmark_lib.sh"
 
 # Tuning knobs (matrix-driven, all required - no script-side defaults):
-#   TP            -- tensor parallel size                       -> --tp
-#   EP_SIZE       -- expert parallel size                       -> --ep-size
-#   DP_ATTENTION  -- "true" enables --enable-dp-attention --dp-size $TP
-#                    Also selects MoE backend / chunked-prefill-size:
-#                      true  -> deepep + mega_moe + chunked-prefill 32768
-#                      false -> flashinfer_mxfp4  + chunked-prefill 8192
-#
-# MTP/EAGLE speculative-decoding flags are applied unconditionally on top of
-# every recipe (same draft chain across CONC ranges). Tuning the spec config
-# per recipe is left as future work once we have sweep data.
+#   TP             -- tensor parallel size                       -> --tp
+#   EP_SIZE        -- expert parallel size                       -> --ep-size
+#   DP_ATTENTION   -- "true" enables --enable-dp-attention --dp-size $TP
+#                     Also selects MoE backend / chunked-prefill-size:
+#                       true  -> deepep + mega_moe + chunked-prefill 32768
+#                       false -> flashinfer_mxfp4  + chunked-prefill 8192
+#   SPEC_DECODING  -- selects EAGLE chain length:
+#                       mtp    -> num-steps=3, eagle-topk=1, num-draft-tokens=4 (default)
+#                       mtp_1  -> num-steps=1, eagle-topk=1, num-draft-tokens=2 (single-step)
 check_env_vars \
     MODEL \
     TP \
     EP_SIZE \
     DP_ATTENTION \
+    SPEC_DECODING \
     CONC \
     ISL \
     OSL \
@@ -54,7 +54,7 @@ export SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2=1
 SERVER_LOG="$PWD/server.log"
 PORT=${PORT:-8888}
 
-echo "TP: $TP, EP_SIZE: $EP_SIZE, DP_ATTENTION: $DP_ATTENTION, CONC: $CONC, ISL: $ISL, OSL: $OSL"
+echo "TP: $TP, EP_SIZE: $EP_SIZE, DP_ATTENTION: $DP_ATTENTION, SPEC_DECODING: $SPEC_DECODING, CONC: $CONC, ISL: $ISL, OSL: $OSL"
 
 EVAL_CONTEXT_ARGS=""
 if [ "${EVAL_ONLY}" = "true" ]; then
@@ -67,13 +67,29 @@ start_gpu_monitor --output "$PWD/gpu_metrics.csv"
 # Recipe path is selected by DP_ATTENTION; MoE backend and chunked-prefill-size follow.
 DEEPEP_CONFIG='{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}}'
 
-# MTP (EAGLE) speculative-decoding flags applied to every recipe.
-SPEC_FLAGS=(
-    --speculative-algorithm EAGLE
-    --speculative-num-steps 3
-    --speculative-eagle-topk 1
-    --speculative-num-draft-tokens 4
-)
+# MTP (EAGLE) speculative-decoding flags. Chain length selected by SPEC_DECODING.
+case "${SPEC_DECODING}" in
+    mtp_1)
+        SPEC_FLAGS=(
+            --speculative-algorithm EAGLE
+            --speculative-num-steps 1
+            --speculative-eagle-topk 1
+            --speculative-num-draft-tokens 2
+        )
+        ;;
+    mtp)
+        SPEC_FLAGS=(
+            --speculative-algorithm EAGLE
+            --speculative-num-steps 3
+            --speculative-eagle-topk 1
+            --speculative-num-draft-tokens 4
+        )
+        ;;
+    *)
+        echo "ERROR: unsupported SPEC_DECODING='${SPEC_DECODING}' (expected: mtp | mtp_1)" >&2
+        exit 1
+        ;;
+esac
 
 if [ "${DP_ATTENTION}" = "true" ]; then
     # Large-batch EP path: deepep + mega_moe.
