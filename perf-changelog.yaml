@@ -1838,7 +1838,7 @@
     - dsv4-fp4-b300-sglang-mtp
   description:
     - "Add DeepSeek-V4-Pro FP4 B300 SGLang benchmark with EAGLE/MTP speculative decoding"
-    - "Image: lmsysorg/sglang:deepseek-v4-b300"
+    - "Image: lmsysorg/sglang:deepseek-v4-b300@sha256:d44a693204aea7995349a76d400190fbeb1662379fe874e81d151bdbe85e2234 (pinned for deep_gemm transform_weights_for_mega_moe support)"
     - "Model: deepseek-ai/DeepSeek-V4-Pro"
     - "Four configs dispatched by CONC: A=TP8/mtp (1-8), B=TP4/mtp (16-128), C=DP4/mtp (64-256), D=DP4/mtp_1 (256-512)"
     - "Overlaps for head-to-head comparison: B/C at conc 64,128; C/D at conc 256"

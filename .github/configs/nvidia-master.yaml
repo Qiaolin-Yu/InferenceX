@@ -1881,7 +1881,7 @@ dsv4-fp4-b300-sglang:
 # `ep` is implicit in sglang: --moe-a2a-backend deepep forces ep_size=tp_size,
 # while the TP-only path leaves ep_size at the default of 1.
 dsv4-fp4-b300-sglang-mtp:
-  image: lmsysorg/sglang:deepseek-v4-b300
+  image: lmsysorg/sglang:deepseek-v4-b300@sha256:d44a693204aea7995349a76d400190fbeb1662379fe874e81d151bdbe85e2234
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b300
