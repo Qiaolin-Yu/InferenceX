@@ -1833,3 +1833,14 @@
     - "Bump --chunked-prefill-size from 4096 to 8192"
     - "Retrigger dsv4-fp8-mi355x-sglang"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1160
+
+- config-keys:
+    - dsv4-fp4-b300-sglang-mtp
+  description:
+    - "Add DeepSeek-V4-Pro FP4 B300 SGLang benchmark with EAGLE/MTP speculative decoding"
+    - "Image: lmsysorg/sglang:deepseek-v4-b300"
+    - "Model: deepseek-ai/DeepSeek-V4-Pro"
+    - "EAGLE flags: num-steps=3, eagle-topk=1, num-draft-tokens=4"
+    - "Recipe selected in script by dp-attn: TP-only + flashinfer_mxfp4 (small batch) vs DP-attn + deepep mega_moe (large batch)"
+    - "Configs: 1k1k and 8k1k, tp 4/8 with conc 1-512"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1166

@@ -3,13 +3,12 @@
 source "$(dirname "$0")/../benchmark_lib.sh"
 
 # Tuning knobs (matrix-driven, all required - no script-side defaults):
-#   TP                   -- tensor parallel size                       -> --tp
-#   EP_SIZE              -- expert parallel size                       -> --ep-size
-#   DP_ATTENTION         -- "true" enables --enable-dp-attention --dp-size $TP
-#   MOE_RUNNER_BACKEND   -- recipe label, one of: deepep | flashinfer_mxfp4
-#                            deepep           -> --moe-a2a-backend deepep + mega_moe env vars
-#                            flashinfer_mxfp4 -> --moe-runner-backend flashinfer_mxfp4 + --disable-flashinfer-autotune
-#   CHUNKED_PREFILL_SIZE -- --chunked-prefill-size value (e.g. 8192, 32768)
+#   TP            -- tensor parallel size                       -> --tp
+#   EP_SIZE       -- expert parallel size                       -> --ep-size
+#   DP_ATTENTION  -- "true" enables --enable-dp-attention --dp-size $TP
+#                    Also selects MoE backend / chunked-prefill-size:
+#                      true  -> deepep + mega_moe + chunked-prefill 32768
+#                      false -> flashinfer_mxfp4  + chunked-prefill 8192
 #
 # MTP/EAGLE speculative-decoding flags are applied unconditionally on top of
 # every recipe (same draft chain across CONC ranges). Tuning the spec config
@@ -19,8 +18,6 @@ check_env_vars \
     TP \
     EP_SIZE \
     DP_ATTENTION \
-    MOE_RUNNER_BACKEND \
-    CHUNKED_PREFILL_SIZE \
     CONC \
     ISL \
     OSL \
@@ -57,7 +54,7 @@ export SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2=1
 SERVER_LOG="$PWD/server.log"
 PORT=${PORT:-8888}
 
-echo "TP: $TP, EP_SIZE: $EP_SIZE, DP_ATTENTION: $DP_ATTENTION, MOE_RUNNER_BACKEND: $MOE_RUNNER_BACKEND, CHUNKED_PREFILL_SIZE: $CHUNKED_PREFILL_SIZE, CONC: $CONC, ISL: $ISL, OSL: $OSL"
+echo "TP: $TP, EP_SIZE: $EP_SIZE, DP_ATTENTION: $DP_ATTENTION, CONC: $CONC, ISL: $ISL, OSL: $OSL"
 
 EVAL_CONTEXT_ARGS=""
 if [ "${EVAL_ONLY}" = "true" ]; then
@@ -67,7 +64,7 @@ fi
 
 start_gpu_monitor --output "$PWD/gpu_metrics.csv"
 
-# Recipe path is selected by MOE_RUNNER_BACKEND. DP-attention applies orthogonally below.
+# Recipe path is selected by DP_ATTENTION; MoE backend and chunked-prefill-size follow.
 DEEPEP_CONFIG='{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}}'
 
 # MTP (EAGLE) speculative-decoding flags applied to every recipe.
@@ -78,35 +75,29 @@ SPEC_FLAGS=(
     --speculative-num-draft-tokens 4
 )
 
-case "${MOE_RUNNER_BACKEND}" in
-    deepep)
-        export SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE=1
-        export SGLANG_OPT_FIX_HASH_MEGA_MOE=1
-        export SGLANG_OPT_USE_FAST_MASK_EP=1
-        export SGLANG_OPT_FIX_MEGA_MOE_MEMORY=1
-        export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=4096
-        export SGLANG_OPT_FIX_NEXTN_MEGA_MOE=1
-        export SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK=0
-        PARALLEL_ARGS=(
-            --moe-a2a-backend deepep
-            --deepep-config "$DEEPEP_CONFIG"
-        )
-        ;;
-    flashinfer_mxfp4)
-        PARALLEL_ARGS=(
-            --moe-runner-backend flashinfer_mxfp4
-            --disable-flashinfer-autotune
-        )
-        ;;
-    *)
-        echo "ERROR: unknown MOE_RUNNER_BACKEND='${MOE_RUNNER_BACKEND}' (expected: deepep | flashinfer_mxfp4)" >&2
-        exit 1
-        ;;
-esac
-
-# DP-attention is orthogonal to MOE_RUNNER_BACKEND.
 if [ "${DP_ATTENTION}" = "true" ]; then
-    PARALLEL_ARGS+=(--dp-size "$TP" --enable-dp-attention)
+    # Large-batch EP path: deepep + mega_moe.
+    export SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE=1
+    export SGLANG_OPT_FIX_HASH_MEGA_MOE=1
+    export SGLANG_OPT_USE_FAST_MASK_EP=1
+    export SGLANG_OPT_FIX_MEGA_MOE_MEMORY=1
+    export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=4096
+    export SGLANG_OPT_FIX_NEXTN_MEGA_MOE=1
+    export SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK=0
+    PARALLEL_ARGS=(
+        --dp-size "$TP"
+        --enable-dp-attention
+        --moe-a2a-backend deepep
+        --deepep-config "$DEEPEP_CONFIG"
+    )
+    CHUNKED_PREFILL_SIZE=32768
+else
+    # Small-batch TP-only path: flashinfer_mxfp4.
+    PARALLEL_ARGS=(
+        --moe-runner-backend flashinfer_mxfp4
+        --disable-flashinfer-autotune
+    )
+    CHUNKED_PREFILL_SIZE=8192
 fi
 
 # Print all SGLANG_* env vars to both the CI step log and server.log so the
