@@ -90,8 +90,6 @@ if [[ "$CONC" == "512" ]] && [ "${DP_ATTENTION}" = "true" ]; then
         --enable-prefill-delayer
     )
     MEM_FRACTION_STATIC=0.94
-    # Override the ISL=1024 → 0.5 default; this recipe runs SWA at 0.1.
-    SWA_FULL_TOKENS_RATIO=0.1
 elif [ "${DP_ATTENTION}" = "true" ]; then
     export SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE=1
     export SGLANG_OPT_FIX_HASH_MEGA_MOE=1
