@@ -2,9 +2,25 @@
 
 source "$(dirname "$0")/../benchmark_lib.sh"
 
+# Tuning knobs (matrix-driven, all required - no script-side defaults):
+#   TP                   -- tensor parallel size                       -> --tp
+#   EP_SIZE              -- expert parallel size                       -> --ep-size
+#   DP_ATTENTION         -- "true" enables --enable-dp-attention --dp-size $TP
+#   MOE_RUNNER_BACKEND   -- recipe label, one of: deepep | flashinfer_mxfp4
+#                            deepep           -> --moe-a2a-backend deepep + mega_moe env vars
+#                            flashinfer_mxfp4 -> --moe-runner-backend flashinfer_mxfp4 + --disable-flashinfer-autotune
+#   CHUNKED_PREFILL_SIZE -- --chunked-prefill-size value (e.g. 8192, 32768)
+#
+# MTP/EAGLE speculative-decoding flags are applied unconditionally on top of
+# every recipe (same draft chain across CONC ranges). Tuning the spec config
+# per recipe is left as future work once we have sweep data.
 check_env_vars \
     MODEL \
     TP \
+    EP_SIZE \
+    DP_ATTENTION \
+    MOE_RUNNER_BACKEND \
+    CHUNKED_PREFILL_SIZE \
     CONC \
     ISL \
     OSL \
@@ -23,7 +39,13 @@ fi
 
 nvidia-smi
 
+# Common SGLANG env vars (apply to every config).
 export SGLANG_JIT_DEEPGEMM_PRECOMPILE=0
+export SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT=1
+export SGLANG_OPT_USE_JIT_NORM=1
+export SGLANG_OPT_USE_JIT_INDEXER_METADATA=1
+export SGLANG_OPT_USE_TOPK_V2=1
+export SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2=1
 
 # TODO(Cam): the deepseek-v4 sglang images install sglang editable at
 # /workspace/sglang/python; prior sglang tags used /sgl-workspace/sglang.
@@ -35,7 +57,7 @@ export SGLANG_JIT_DEEPGEMM_PRECOMPILE=0
 SERVER_LOG="$PWD/server.log"
 PORT=${PORT:-8888}
 
-echo "TP: $TP, CONC: $CONC, ISL: $ISL, OSL: $OSL"
+echo "TP: $TP, EP_SIZE: $EP_SIZE, DP_ATTENTION: $DP_ATTENTION, MOE_RUNNER_BACKEND: $MOE_RUNNER_BACKEND, CHUNKED_PREFILL_SIZE: $CHUNKED_PREFILL_SIZE, CONC: $CONC, ISL: $ISL, OSL: $OSL"
 
 EVAL_CONTEXT_ARGS=""
 if [ "${EVAL_ONLY}" = "true" ]; then
@@ -45,12 +67,7 @@ fi
 
 start_gpu_monitor --output "$PWD/gpu_metrics.csv"
 
-# Three recipes from https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4
-# with EAGLE / MTP enabled:
-#   - low-latency    (CONC <= 32):        TP-only, flashinfer_mxfp4 MoE
-#   - balanced       (32 < CONC <= 128):  + DP-attn, mega-moe EP
-#   - max-throughput (CONC > 128):        + DP-attn, mega-moe EP, max-running-requests=512
-# Speculative-decoding flags follow the cookbook EAGLE config.
+# Recipe path is selected by MOE_RUNNER_BACKEND. DP-attention applies orthogonally below.
 DEEPEP_CONFIG='{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}}'
 
 # MTP (EAGLE) speculative-decoding flags applied to every recipe.
@@ -61,76 +78,44 @@ SPEC_FLAGS=(
     --speculative-num-draft-tokens 4
 )
 
-if [[ $CONC -le 32 ]]; then
-    RECIPE=low-latency
-    export SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT=1
-    # common optimizations
-    export SGLANG_OPT_USE_JIT_NORM=1
-    export SGLANG_OPT_USE_JIT_INDEXER_METADATA=1
-    export SGLANG_OPT_USE_TOPK_V2=1
-    export SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2=1
-    RECIPE_FLAGS=(
-        --moe-runner-backend flashinfer_mxfp4
-        --chunked-prefill-size 32768
-        --disable-flashinfer-autotune
-        --mem-fraction-static 0.90
-        --max-running-requests 32
-        --swa-full-tokens-ratio 0.1
-    )
-elif [[ $CONC -le 128 ]]; then
-    RECIPE=balanced
-    export SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT=1
-    # common optimizations
-    export SGLANG_OPT_USE_JIT_NORM=1
-    export SGLANG_OPT_USE_JIT_INDEXER_METADATA=1
-    export SGLANG_OPT_USE_TOPK_V2=1
-    export SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2=1
-    # MoE EP related flags
-    export SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE=1
-    export SGLANG_OPT_FIX_HASH_MEGA_MOE=1
-    export SGLANG_OPT_USE_FAST_MASK_EP=1
-    export SGLANG_OPT_FIX_MEGA_MOE_MEMORY=1
-    export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=4096
-    export SGLANG_OPT_FIX_NEXTN_MEGA_MOE=1
-    export SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK=0
-    RECIPE_FLAGS=(
-        --dp-size "$TP"
-        --enable-dp-attention
-        --moe-a2a-backend deepep
-        --deepep-config "$DEEPEP_CONFIG"
-        --mem-fraction-static 0.83
-        --max-running-requests 128
-        --chunked-prefill-size 32768
-        --swa-full-tokens-ratio 0.1
-    )
-else
-    RECIPE=max-throughput
-    export SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT=1
-    # common optimizations
-    export SGLANG_OPT_USE_JIT_NORM=1
-    export SGLANG_OPT_USE_JIT_INDEXER_METADATA=1
-    export SGLANG_OPT_USE_TOPK_V2=1
-    export SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2=1
-    # MoE EP related flags
-    export SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE=1
-    export SGLANG_OPT_FIX_HASH_MEGA_MOE=1
-    export SGLANG_OPT_USE_FAST_MASK_EP=1
-    export SGLANG_OPT_FIX_MEGA_MOE_MEMORY=1
-    export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=4096
-    export SGLANG_OPT_FIX_NEXTN_MEGA_MOE=1
-    export SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK=0
-    RECIPE_FLAGS=(
-        --dp-size "$TP"
-        --enable-dp-attention
-        --moe-a2a-backend deepep
-        --deepep-config "$DEEPEP_CONFIG"
-        --mem-fraction-static 0.90
-        --max-running-requests 512
-        --chunked-prefill-size 32768
-        --swa-full-tokens-ratio 0.1
-    )
+case "${MOE_RUNNER_BACKEND}" in
+    deepep)
+        export SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE=1
+        export SGLANG_OPT_FIX_HASH_MEGA_MOE=1
+        export SGLANG_OPT_USE_FAST_MASK_EP=1
+        export SGLANG_OPT_FIX_MEGA_MOE_MEMORY=1
+        export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=4096
+        export SGLANG_OPT_FIX_NEXTN_MEGA_MOE=1
+        export SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK=0
+        PARALLEL_ARGS=(
+            --moe-a2a-backend deepep
+            --deepep-config "$DEEPEP_CONFIG"
+        )
+        ;;
+    flashinfer_mxfp4)
+        PARALLEL_ARGS=(
+            --moe-runner-backend flashinfer_mxfp4
+            --disable-flashinfer-autotune
+        )
+        ;;
+    *)
+        echo "ERROR: unknown MOE_RUNNER_BACKEND='${MOE_RUNNER_BACKEND}' (expected: deepep | flashinfer_mxfp4)" >&2
+        exit 1
+        ;;
+esac
+
+# DP-attention is orthogonal to MOE_RUNNER_BACKEND.
+if [ "${DP_ATTENTION}" = "true" ]; then
+    PARALLEL_ARGS+=(--dp-size "$TP" --enable-dp-attention)
 fi
-echo "Recipe: $RECIPE (CONC=$CONC)"
+
+# Print all SGLANG_* env vars to both the CI step log and server.log so the
+# launch config is auditable from the result artifact alone.
+{
+    echo "=== SGLANG_* env vars at launch ==="
+    env | grep -E '^SGLANG_' | sort
+    echo "==================================="
+} | tee "$SERVER_LOG"
 
 set -x
 PYTHONNOUSERSITE=1 sglang serve \
@@ -139,8 +124,13 @@ PYTHONNOUSERSITE=1 sglang serve \
     --port $PORT \
     --trust-remote-code \
     --tp $TP \
+    --ep-size $EP_SIZE \
+    --chunked-prefill-size "$CHUNKED_PREFILL_SIZE" \
+    --max-running-requests "$((CONC * 3 / 2))" \
+    --mem-fraction-static 0.90 \
+    --swa-full-tokens-ratio 0.1 \
     "${SPEC_FLAGS[@]}" \
-    "${RECIPE_FLAGS[@]}" $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
+    "${PARALLEL_ARGS[@]}" $EVAL_CONTEXT_ARGS >> $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
