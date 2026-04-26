@@ -296,6 +296,8 @@ def generate_full_sweep(args, all_config_data, runner_data):
                     conc_end = bmk[Fields.CONC_END.value]
                     ep = bmk.get(Fields.EP.value)
                     dp_attn = bmk.get(Fields.DP_ATTN.value)
+                    moe_runner_backend = bmk.get(Fields.MOE_RUNNER_BACKEND.value)
+                    chunked_prefill_size = bmk.get(Fields.CHUNKED_PREFILL_SIZE.value)
                     spec_decoding = bmk.get(Fields.SPEC_DECODING.value, "none")
 
                     # Apply max-tp filter if specified
@@ -363,6 +365,10 @@ def generate_full_sweep(args, all_config_data, runner_data):
                                 entry[Fields.EP.value] = ep
                             if dp_attn is not None:
                                 entry[Fields.DP_ATTN.value] = dp_attn
+                            if moe_runner_backend is not None:
+                                entry[Fields.MOE_RUNNER_BACKEND.value] = moe_runner_backend
+                            if chunked_prefill_size is not None:
+                                entry[Fields.CHUNKED_PREFILL_SIZE.value] = chunked_prefill_size
 
                             validate_matrix_entry(entry, is_multinode)
                             matrix_values.append(entry)
@@ -627,6 +633,8 @@ def generate_test_config_sweep(args, all_config_data):
                     tp = bmk[Fields.TP.value]
                     ep = bmk.get(Fields.EP.value)
                     dp_attn = bmk.get(Fields.DP_ATTN.value)
+                    moe_runner_backend = bmk.get(Fields.MOE_RUNNER_BACKEND.value)
+                    chunked_prefill_size = bmk.get(Fields.CHUNKED_PREFILL_SIZE.value)
                     spec_decoding = bmk.get(Fields.SPEC_DECODING.value, "none")
 
                     # Get concurrency values
@@ -672,6 +680,10 @@ def generate_test_config_sweep(args, all_config_data):
                             Fields.DISAGG.value: disagg,
                             Fields.RUN_EVAL.value: False,
                         }
+                        if moe_runner_backend is not None:
+                            entry[Fields.MOE_RUNNER_BACKEND.value] = moe_runner_backend
+                        if chunked_prefill_size is not None:
+                            entry[Fields.CHUNKED_PREFILL_SIZE.value] = chunked_prefill_size
                         matrix_values.append(validate_matrix_entry(entry, is_multinode=False))
 
     return matrix_values

@@ -2,10 +2,21 @@
 
 source "$(dirname "$0")/../benchmark_lib.sh"
 
+# Tuning knobs (matrix-driven, all required - no script-side defaults):
+#   TP                   -- tensor parallel size                       -> --tp
+#   EP_SIZE              -- expert parallel size                       -> --ep-size
+#   DP_ATTENTION         -- "true" enables --enable-dp-attention --dp-size $TP
+#   MOE_RUNNER_BACKEND   -- recipe label, one of: deepep | flashinfer_mxfp4
+#                            deepep           -> --moe-a2a-backend deepep + mega_moe env vars
+#                            flashinfer_mxfp4 -> --moe-runner-backend flashinfer_mxfp4 + --disable-flashinfer-autotune
+#   CHUNKED_PREFILL_SIZE -- --chunked-prefill-size value (e.g. 8192, 32768)
 check_env_vars \
     MODEL \
     TP \
+    EP_SIZE \
     DP_ATTENTION \
+    MOE_RUNNER_BACKEND \
+    CHUNKED_PREFILL_SIZE \
     CONC \
     ISL \
     OSL \
@@ -37,7 +48,7 @@ export SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2=1
 SERVER_LOG="$PWD/server.log"
 PORT=${PORT:-8888}
 
-echo "TP: $TP, DP_ATTENTION: $DP_ATTENTION, CONC: $CONC, ISL: $ISL, OSL: $OSL"
+echo "TP: $TP, EP_SIZE: $EP_SIZE, DP_ATTENTION: $DP_ATTENTION, MOE_RUNNER_BACKEND: $MOE_RUNNER_BACKEND, CHUNKED_PREFILL_SIZE: $CHUNKED_PREFILL_SIZE, CONC: $CONC, ISL: $ISL, OSL: $OSL"
 
 EVAL_CONTEXT_ARGS=""
 if [ "${EVAL_ONLY}" = "true" ]; then
@@ -47,32 +58,40 @@ fi
 
 start_gpu_monitor --output "$PWD/gpu_metrics.csv"
 
-# Pick the parallelism + MoE backend based on DP_ATTENTION (mirrors the vllm
-# script's pattern). DP-attention turns on EP-MoE (deepep) and the related
-# mega_moe optimizations; single-instance uses flashinfer_mxfp4.
+# Recipe path is selected by MOE_RUNNER_BACKEND. DP-attention applies orthogonally below.
 DEEPEP_CONFIG='{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}}'
 
+case "${MOE_RUNNER_BACKEND}" in
+    deepep)
+        export SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE=1
+        export SGLANG_OPT_FIX_HASH_MEGA_MOE=1
+        export SGLANG_OPT_USE_FAST_MASK_EP=1
+        export SGLANG_OPT_FIX_MEGA_MOE_MEMORY=1
+        export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=4096
+        export SGLANG_OPT_FIX_NEXTN_MEGA_MOE=1
+        export SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK=0
+        PARALLEL_ARGS=(
+            --moe-a2a-backend deepep
+            --deepep-config "$DEEPEP_CONFIG"
+        )
+        ;;
+    flashinfer_mxfp4)
+        PARALLEL_ARGS=(
+            --moe-runner-backend flashinfer_mxfp4
+            --disable-flashinfer-autotune
+        )
+        ;;
+    *)
+        echo "ERROR: unknown MOE_RUNNER_BACKEND='${MOE_RUNNER_BACKEND}' (expected: deepep | flashinfer_mxfp4)" >&2
+        exit 1
+        ;;
+esac
+
+# DP-attention is orthogonal to MOE_RUNNER_BACKEND. Prefill delayer holds back
+# prefill chunks to keep DP ranks aligned at decode time; only meaningful when
+# DP-attn is on.
 if [ "${DP_ATTENTION}" = "true" ]; then
-    export SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE=1
-    export SGLANG_OPT_FIX_HASH_MEGA_MOE=1
-    export SGLANG_OPT_USE_FAST_MASK_EP=1
-    export SGLANG_OPT_FIX_MEGA_MOE_MEMORY=1
-    export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=4096
-    export SGLANG_OPT_FIX_NEXTN_MEGA_MOE=1
-    export SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK=0
-    PARALLEL_ARGS=(
-        --dp-size "$TP"
-        --enable-dp-attention
-        --moe-a2a-backend deepep
-        --deepep-config "$DEEPEP_CONFIG"
-        --chunked-prefill-size 32768
-    )
-else
-    PARALLEL_ARGS=(
-        --moe-runner-backend flashinfer_mxfp4
-        --chunked-prefill-size 8192
-        --disable-flashinfer-autotune
-    )
+    PARALLEL_ARGS+=(--dp-size "$TP" --enable-dp-attention --enable-prefill-delayer)
 fi
 
 # Print all SGLANG_* env vars to both the CI step log and server.log so the
@@ -90,6 +109,8 @@ PYTHONNOUSERSITE=1 sglang serve \
     --port $PORT \
     --trust-remote-code \
     --tp $TP \
+    --ep-size $EP_SIZE \
+    --chunked-prefill-size "$CHUNKED_PREFILL_SIZE" \
     --max-running-requests "$((CONC * 3 / 2))" \
     --mem-fraction-static 0.90 \
     --swa-full-tokens-ratio 0.1 \
