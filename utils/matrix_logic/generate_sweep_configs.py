@@ -298,6 +298,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
                     dp_attn = bmk.get(Fields.DP_ATTN.value)
                     moe_runner_backend = bmk.get(Fields.MOE_RUNNER_BACKEND.value)
                     chunked_prefill_size = bmk.get(Fields.CHUNKED_PREFILL_SIZE.value)
+                    swa_full_tokens_ratio = bmk.get(Fields.SWA_FULL_TOKENS_RATIO.value)
                     spec_decoding = bmk.get(Fields.SPEC_DECODING.value, "none")
 
                     # Apply max-tp filter if specified
@@ -369,6 +370,8 @@ def generate_full_sweep(args, all_config_data, runner_data):
                                 entry[Fields.MOE_RUNNER_BACKEND.value] = moe_runner_backend
                             if chunked_prefill_size is not None:
                                 entry[Fields.CHUNKED_PREFILL_SIZE.value] = chunked_prefill_size
+                            if swa_full_tokens_ratio is not None:
+                                entry[Fields.SWA_FULL_TOKENS_RATIO.value] = swa_full_tokens_ratio
 
                             validate_matrix_entry(entry, is_multinode)
                             matrix_values.append(entry)
@@ -635,6 +638,7 @@ def generate_test_config_sweep(args, all_config_data):
                     dp_attn = bmk.get(Fields.DP_ATTN.value)
                     moe_runner_backend = bmk.get(Fields.MOE_RUNNER_BACKEND.value)
                     chunked_prefill_size = bmk.get(Fields.CHUNKED_PREFILL_SIZE.value)
+                    swa_full_tokens_ratio = bmk.get(Fields.SWA_FULL_TOKENS_RATIO.value)
                     spec_decoding = bmk.get(Fields.SPEC_DECODING.value, "none")
 
                     # Get concurrency values
@@ -684,6 +688,8 @@ def generate_test_config_sweep(args, all_config_data):
                             entry[Fields.MOE_RUNNER_BACKEND.value] = moe_runner_backend
                         if chunked_prefill_size is not None:
                             entry[Fields.CHUNKED_PREFILL_SIZE.value] = chunked_prefill_size
+                        if swa_full_tokens_ratio is not None:
+                            entry[Fields.SWA_FULL_TOKENS_RATIO.value] = swa_full_tokens_ratio
                         matrix_values.append(validate_matrix_entry(entry, is_multinode=False))
 
     return matrix_values

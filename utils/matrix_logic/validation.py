@@ -37,6 +37,7 @@ class Fields(Enum):
     DP_ATTN = 'dp-attn'
     MOE_RUNNER_BACKEND = 'moe-runner-backend'
     CHUNKED_PREFILL_SIZE = 'chunked-prefill-size'
+    SWA_FULL_TOKENS_RATIO = 'swa-full-tokens-ratio'
 
     # Multinode-specific fields (when MULTINODE = true)
     SPEC_DECODING = 'spec-decoding'
@@ -92,6 +93,8 @@ class SingleNodeMatrixEntry(BaseModel):
         default=None, alias=Fields.MOE_RUNNER_BACKEND.value)
     chunked_prefill_size: Optional[int] = Field(
         default=None, alias=Fields.CHUNKED_PREFILL_SIZE.value)
+    swa_full_tokens_ratio: Optional[float] = Field(
+        default=None, alias=Fields.SWA_FULL_TOKENS_RATIO.value)
     conc: Union[int, List[int]]
     max_model_len: int = Field(alias=Fields.MAX_MODEL_LEN.value)
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
@@ -218,6 +221,8 @@ class SingleNodeSearchSpaceEntry(BaseModel):
         default=None, alias=Fields.MOE_RUNNER_BACKEND.value)
     chunked_prefill_size: Optional[int] = Field(
         default=None, alias=Fields.CHUNKED_PREFILL_SIZE.value)
+    swa_full_tokens_ratio: Optional[float] = Field(
+        default=None, alias=Fields.SWA_FULL_TOKENS_RATIO.value)
     conc_start: Optional[int] = Field(
         default=None, alias=Fields.CONC_START.value)
     conc_end: Optional[int] = Field(

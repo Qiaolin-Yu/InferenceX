@@ -48,6 +48,11 @@ on:
         required: false
         type: string
         default: ''
+      swa-full-tokens-ratio:
+        description: "Optional --swa-full-tokens-ratio value (e.g. 0.1). Empty = unset; the benchmark script decides whether to require it."
+        required: false
+        type: string
+        default: ''
       max-model-len:
         required: true
         type: string
@@ -96,6 +101,7 @@ env:
   DP_ATTENTION: ${{ inputs.dp-attn }}
   MOE_RUNNER_BACKEND: ${{ inputs.moe-runner-backend }}
   CHUNKED_PREFILL_SIZE: ${{ inputs.chunked-prefill-size }}
+  SWA_FULL_TOKENS_RATIO: ${{ inputs.swa-full-tokens-ratio }}
   CONC: ${{ inputs.conc }}
   SPEC_DECODING: ${{ inputs.spec-decoding }}
   DISAGG: ${{ inputs.disagg }}

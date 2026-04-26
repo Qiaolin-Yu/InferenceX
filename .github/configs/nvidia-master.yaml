@@ -1685,15 +1685,15 @@ dsv4-fp4-b200-sglang:
   - isl: 1024
     osl: 1024
     search-space:
-    - { tp: 8, ep: 1, moe-runner-backend: flashinfer_mxfp4, chunked-prefill-size: 8192, conc-start: 1, conc-end: 32 }
-    - { tp: 8, ep: 8, dp-attn: true, moe-runner-backend: deepep, chunked-prefill-size: 32768, conc-start: 64, conc-end: 128 }
-    - { tp: 8, ep: 8, dp-attn: true, moe-runner-backend: deepep, chunked-prefill-size: 32768, conc-start: 256, conc-end: 1024 }
+    - { tp: 8, ep: 1, moe-runner-backend: flashinfer_mxfp4, chunked-prefill-size: 8192, swa-full-tokens-ratio: 0.1, conc-start: 1, conc-end: 32 }
+    - { tp: 8, ep: 8, dp-attn: true, moe-runner-backend: deepep, chunked-prefill-size: 32768, swa-full-tokens-ratio: 0.1, conc-start: 64, conc-end: 128 }
+    - { tp: 8, ep: 8, dp-attn: true, moe-runner-backend: deepep, chunked-prefill-size: 32768, swa-full-tokens-ratio: 0.1, conc-start: 256, conc-end: 1024 }
   - isl: 8192
     osl: 1024
     search-space:
-    - { tp: 8, ep: 1, moe-runner-backend: flashinfer_mxfp4, chunked-prefill-size: 8192, conc-start: 1, conc-end: 32 }
-    - { tp: 8, ep: 8, dp-attn: true, moe-runner-backend: deepep, chunked-prefill-size: 32768, conc-start: 64, conc-end: 128 }
-    - { tp: 8, ep: 8, dp-attn: true, moe-runner-backend: deepep, chunked-prefill-size: 32768, conc-start: 256, conc-end: 512 }
+    - { tp: 8, ep: 1, moe-runner-backend: flashinfer_mxfp4, chunked-prefill-size: 8192, swa-full-tokens-ratio: 0.1, conc-start: 1, conc-end: 32 }
+    - { tp: 8, ep: 8, dp-attn: true, moe-runner-backend: deepep, chunked-prefill-size: 32768, swa-full-tokens-ratio: 0.1, conc-start: 64, conc-end: 128 }
+    - { tp: 8, ep: 8, dp-attn: true, moe-runner-backend: deepep, chunked-prefill-size: 32768, swa-full-tokens-ratio: 0.1, conc-start: 256, conc-end: 512 }
 
 # NOTE: At the time of submission, https://cookbook.sglang.io/autoregressive/DeepSeek/DeepSeek-R1
 # does not have a B300-specific recipe, so this config reuses the existing DSR1 FP4
@@ -1843,15 +1843,15 @@ dsv4-fp4-b300-sglang:
   - isl: 1024
     osl: 1024
     search-space:
-    - { tp: 8, ep: 1, moe-runner-backend: flashinfer_mxfp4, chunked-prefill-size: 8192, conc-start: 1, conc-end: 32 }
-    - { tp: 4, ep: 1, moe-runner-backend: flashinfer_mxfp4, chunked-prefill-size: 8192, conc-start: 1, conc-end: 64 }
-    - { tp: 4, ep: 4, dp-attn: true, moe-runner-backend: deepep, chunked-prefill-size: 32768, conc-start: 32, conc-end: 512 }
+    - { tp: 8, ep: 1, moe-runner-backend: flashinfer_mxfp4, chunked-prefill-size: 8192, swa-full-tokens-ratio: 0.5, conc-start: 1, conc-end: 32 }
+    - { tp: 4, ep: 1, moe-runner-backend: flashinfer_mxfp4, chunked-prefill-size: 8192, swa-full-tokens-ratio: 0.5, conc-start: 1, conc-end: 64 }
+    - { tp: 4, ep: 4, dp-attn: true, moe-runner-backend: deepep, chunked-prefill-size: 32768, swa-full-tokens-ratio: 0.5, conc-start: 32, conc-end: 512 }
   - isl: 8192
     osl: 1024
     search-space:
-    - { tp: 8, ep: 1, moe-runner-backend: flashinfer_mxfp4, chunked-prefill-size: 8192, conc-start: 1, conc-end: 32 }
-    - { tp: 4, ep: 1, moe-runner-backend: flashinfer_mxfp4, chunked-prefill-size: 8192, conc-start: 1, conc-end: 64 }
-    - { tp: 4, ep: 4, dp-attn: true, moe-runner-backend: deepep, chunked-prefill-size: 32768, conc-start: 32, conc-end: 512 }
+    - { tp: 8, ep: 1, moe-runner-backend: flashinfer_mxfp4, chunked-prefill-size: 8192, swa-full-tokens-ratio: 0.1, conc-start: 1, conc-end: 32 }
+    - { tp: 4, ep: 1, moe-runner-backend: flashinfer_mxfp4, chunked-prefill-size: 8192, swa-full-tokens-ratio: 0.1, conc-start: 1, conc-end: 64 }
+    - { tp: 4, ep: 4, dp-attn: true, moe-runner-backend: deepep, chunked-prefill-size: 32768, swa-full-tokens-ratio: 0.1, conc-start: 32, conc-end: 512 }
 
 qwen3.5-bf16-b200-sglang:
   image: lmsysorg/sglang:nightly-dev-20260216-d3bae71e

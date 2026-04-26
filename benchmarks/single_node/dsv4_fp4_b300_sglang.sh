@@ -9,7 +9,8 @@ source "$(dirname "$0")/../benchmark_lib.sh"
 #   MOE_RUNNER_BACKEND   -- recipe label, one of: deepep | flashinfer_mxfp4
 #                            deepep           -> --moe-a2a-backend deepep + mega_moe env vars
 #                            flashinfer_mxfp4 -> --moe-runner-backend flashinfer_mxfp4 + --disable-flashinfer-autotune
-#   CHUNKED_PREFILL_SIZE -- --chunked-prefill-size value (e.g. 8192, 32768)
+#   CHUNKED_PREFILL_SIZE  -- --chunked-prefill-size value (e.g. 8192, 32768)
+#   SWA_FULL_TOKENS_RATIO -- --swa-full-tokens-ratio value (e.g. 0.1)
 check_env_vars \
     MODEL \
     TP \
@@ -17,6 +18,7 @@ check_env_vars \
     DP_ATTENTION \
     MOE_RUNNER_BACKEND \
     CHUNKED_PREFILL_SIZE \
+    SWA_FULL_TOKENS_RATIO \
     CONC \
     ISL \
     OSL \
@@ -53,7 +55,7 @@ export SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2=1
 SERVER_LOG="$PWD/server.log"
 PORT=${PORT:-8888}
 
-echo "TP: $TP, EP_SIZE: $EP_SIZE, DP_ATTENTION: $DP_ATTENTION, MOE_RUNNER_BACKEND: $MOE_RUNNER_BACKEND, CHUNKED_PREFILL_SIZE: $CHUNKED_PREFILL_SIZE, CONC: $CONC, ISL: $ISL, OSL: $OSL"
+echo "TP: $TP, EP_SIZE: $EP_SIZE, DP_ATTENTION: $DP_ATTENTION, MOE_RUNNER_BACKEND: $MOE_RUNNER_BACKEND, CHUNKED_PREFILL_SIZE: $CHUNKED_PREFILL_SIZE, SWA_FULL_TOKENS_RATIO: $SWA_FULL_TOKENS_RATIO, CONC: $CONC, ISL: $ISL, OSL: $OSL"
 
 EVAL_CONTEXT_ARGS=""
 if [ "${EVAL_ONLY}" = "true" ]; then
@@ -118,7 +120,7 @@ PYTHONNOUSERSITE=1 sglang serve \
     --chunked-prefill-size "$CHUNKED_PREFILL_SIZE" \
     --max-running-requests "$((CONC * 3 / 2))" \
     --mem-fraction-static 0.90 \
-    --swa-full-tokens-ratio 0.1 \
+    --swa-full-tokens-ratio "$SWA_FULL_TOKENS_RATIO" \
     "${PARALLEL_ARGS[@]}" $EVAL_CONTEXT_ARGS >> $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
