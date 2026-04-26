@@ -116,7 +116,7 @@ PYTHONNOUSERSITE=1 sglang serve \
     --tp $TP \
     --ep-size $EP_SIZE \
     --chunked-prefill-size "$CHUNKED_PREFILL_SIZE" \
-    --max-running-requests "$((CONC * 3 / 2))" \
+    --max-running-requests "$(( CONC * 3 / 2 > 8 ? CONC * 3 / 2 : 8 ))" \
     --mem-fraction-static 0.90 \
     --swa-full-tokens-ratio 0.1 \
     "${SPEC_FLAGS[@]}" \
@@ -138,8 +138,7 @@ run_benchmark_serving \
     --num-prompts $((CONC * 10)) \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
-    --result-dir "$PWD/" \
-    --use-chat-template
+    --result-dir "$PWD/"
 
 if [ "${RUN_EVAL}" = "true" ]; then
     run_eval --framework lm-eval --port "$PORT"
