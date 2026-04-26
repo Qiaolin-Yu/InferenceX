@@ -96,7 +96,7 @@ esac
 # prefill chunks to keep DP ranks aligned at decode time; only meaningful when
 # DP-attn is on.
 if [ "${DP_ATTENTION}" = "true" ]; then
-    PARALLEL_ARGS+=(--dp-size "$TP" --enable-dp-attention --enable-prefill-delayer)
+    PARALLEL_ARGS+=(--dp-size "$TP" --enable-dp-attention)
 fi
 
 # Print all SGLANG_* env vars to both the CI step log and server.log so the
