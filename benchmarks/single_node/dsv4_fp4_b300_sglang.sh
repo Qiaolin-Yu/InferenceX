@@ -70,6 +70,7 @@ DEEPEP_CONFIG='{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}
 MEM_FRACTION_STATIC=0.90
 
 if [ "${DP_ATTENTION}" = "true" ]; then
+    export SGLANG_OPT_SWA_EVICT_DROP_PAGE_MARGIN=1
     export SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE=0
     export SGLANG_OPT_FIX_HASH_MEGA_MOE=0
     export SGLANG_OPT_USE_FAST_MASK_EP=1
@@ -110,7 +111,7 @@ PYTHONNOUSERSITE=1 sglang serve \
     --port $PORT \
     --trust-remote-code \
     --tp $TP \
-    --max-running-requests "$((CONC * 3 / 2))" \
+    --max-running-requests "$(( CONC * 3 / 2 > 8 ? CONC * 3 / 2 : 8 ))" \
     --mem-fraction-static "$MEM_FRACTION_STATIC" \
     --swa-full-tokens-ratio "$SWA_FULL_TOKENS_RATIO" \
     "${PARALLEL_ARGS[@]}" $EVAL_CONTEXT_ARGS >> $SERVER_LOG 2>&1 &
